@@ -26,24 +26,41 @@ def load_model():
         return
     
     model_load_attempted = True
-    model_path = r"C:/Users/explo/Desktop/Mental Health Chatbot/backend/mental_health_chatbot"
     
     try:
-        logger.info(f"Attempting to load model from: {model_path}")
+        from transformers import AutoTokenizer, AutoModelForCausalLM
         
-        # Check if path exists
-        if not os.path.exists(model_path):
-            logger.error(f"Model path does not exist: {model_path}")
+        # Determine model path - different for local vs production
+        model_path = None
+        
+        # Check possible model paths (for different environments)
+        possible_paths = [
+            "mental_health_chatbot",  # Render and most cloud environments
+            "backend/mental_health_chatbot",  # If app is in root but model in backend
+            "./mental_health_chatbot",  # Current directory
+            "/opt/render/project/src/mental_health_chatbot",  # Render specific path
+            r"C:/Users/explo/Desktop/Mental Health Chatbot/backend/mental_health_chatbot"  # Your local path
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                model_path = path
+                logger.info(f"Found model at: {model_path}")
+                break
+        
+        if not model_path:
+            logger.error("Model path not found in any expected location")
             return
         
-        # Check if the path is a directory with model files
-        required_files = ['config.json', 'pytorch_model.bin', 'vocab.json', 'merges.txt']
-        existing_files = os.listdir(model_path)
-        logger.info(f"Files in model directory: {existing_files}")
+        logger.info(f"Attempting to load model from: {model_path}")
         
+        # Check if the path is a directory with model files
+        if not os.path.isdir(model_path):
+            logger.error(f"Model path is not a directory: {model_path}")
+            return
+            
         # Load tokenizer
         logger.info("Loading tokenizer...")
-        from transformers import AutoTokenizer, AutoModelForCausalLM
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         
         # Load model
@@ -89,7 +106,7 @@ def clean_artifacts(text: str) -> str:
     if not text:
         return ""
     text = re.sub(r"\[\s*'|'\s*\]|\"\s*\"|\[\s*\"|\"\s*\]", " ", text)
-    text = text.replace("']","").replace("['","").replace('"]','').replace('["',"")
+    text = text.replace("']","").replace("['","").replace('"]','").replace('["',"")
     text = re.sub(r"<bot>[:]*", "<bot>:", text)
     text = re.sub(r"\s{2,}", " ", text)
     text = re.sub(r'^[^A-Za-z0-9]+', '', text)
@@ -280,4 +297,8 @@ if __name__ == "__main__":
     else:
         print("⚠️  Model not loaded. Using fallback responses. Starting Flask server...")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # For production, use the PORT environment variable
+    port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+    
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
