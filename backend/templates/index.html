@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindNest - Mental Wellness Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-white text-gray-900">
+
+  <!-- Navbar -->
+  <nav class="flex justify-between items-center px-6 py-4 shadow-sm">
+    <div class="flex items-center space-x-2">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="MindNest Logo" class="w-8 h-8">
+      <span class="font-bold text-xl">MindNest</span>
+    </div>
+    <div class="hidden md:flex space-x-6">
+      <!-- ... existing code ... -->
+<a href="{{ url_for('home') }}" class="hover:text-blue-600">Features</a>
+<a href="{{ url_for('about_page') }}" class="hover:text-blue-600">About</a>
+<!-- ... existing code ... -->
+    </div>
+    <a href="{{ url_for('chat_page') }}" 
+       class="bg-black text-white px-4 py-2 rounded-full 
+              hover:bg-gray-800 hover:scale-105 hover:shadow-lg 
+              transition duration-300 ease-in-out">
+       Start chatting
+    </a>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="text-center py-16 px-6">
+    <h1 class="text-3xl md:text-4xl font-bold">Meet Your Mental Wellness Chatbot</h1>
+    <p class="text-xl text-gray-600 mt-2">24/7 support for your mind</p>
+    <img src="{{ url_for('static', filename='hero.png') }}" alt="Chatbot illustration" class="mx-auto mt-8 rounded-lg shadow-lg max-w-lg">
+    <a href="{{ url_for('chat_page') }}" 
+       class="mt-6 inline-block bg-black text-white px-6 py-3 rounded-full 
+              hover:bg-gray-800 hover:scale-105 hover:shadow-lg 
+              transition duration-300 ease-in-out">
+       Get Started
+    </a>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="py-16 px-6 space-y-16">
+    <!-- Feature 1 -->
+    <div class="grid md:grid-cols-2 items-center gap-8">
+      <div>
+        <h2 class="text-xl font-bold">Always here for you.</h2>
+        <p class="text-gray-600 mt-2">Because not everything needs a record. Receive support day or night — your chatbot is available 24/7 for conversations anytime you need help.</p>
+      </div>
+      <img src="{{ url_for('static', filename='feature1.png') }}" alt="Support" class="rounded-lg shadow-lg w-40 md:w-64 lg:w-80 mx-auto">
+    </div>
+
+    <!-- Feature 2 -->
+    <div class="grid md:grid-cols-2 items-center gap-8">
+      <img src="{{ url_for('static', filename='feature2.png') }}" alt="Privacy" class="rounded-lg shadow-lg w-40 md:w-64 lg:w-80 mx-auto">
+      <div>
+        <h2 class="text-xl font-bold">Private and secure.</h2>
+        <p class="text-gray-600 mt-2">Your mental health matters, and so does your privacy. All chats are fully confidential.</p>
+      </div>
+    </div>
+
+    <!-- Feature 3 -->
+    <div class="grid md:grid-cols-2 items-center gap-8">
+      <div>
+        <h2 class="text-xl font-bold">Evidence-based advice.</h2>
+        <p class="text-gray-600 mt-2">Get guidance grounded in proven mental health practices and the latest research.</p>
+      </div>
+      <img src="{{ url_for('static', filename='feature3.png') }}" alt="Advice" class="rounded-lg shadow-lg w-40 md:w-64 lg:w-80 mx-auto">
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="text-center py-16 bg-gray-50">
+    <h2 class="text-2xl font-bold">What users say</h2>
+    <p class="text-gray-600 mt-2">Real support, real change.</p>
+    <img src="{{ url_for('static', filename='testimonials.png') }}" alt="User feedback" class="mx-auto mt-8 rounded-lg shadow-lg w-48 md:w-96 lg:w-[36rem]">
+  </section>
+
+  <!-- CTA -->
+  <section class="text-center py-16">
+    <h2 class="text-2xl font-bold">Start your journey.</h2>
+    <p class="text-gray-600 mt-2">Try it now.</p>
+    <a href="{{ url_for('chat_page') }}" 
+       class="mt-6 inline-block bg-black text-white px-6 py-3 rounded-full 
+              hover:bg-gray-800 hover:scale-105 hover:shadow-lg 
+              transition duration-300 ease-in-out">
+       Start chatting
+    </a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-100 py-10 px-6">
+    <div class="grid md:grid-cols-4 gap-6 text-sm">
+      <div class="space-y-2">
+        <h3 class="font-bold">Company</h3>
+        <a href="{{ url_for('about_page') }}">About</a><br>
+        <a href="#">Careers</a><br>
+        <a href="#">Press</a>
+      </div>
+      <div class="space-y-2">
+        <h3 class="font-bold">Product</h3>
+        <a href="#features">Features</a><br>
+        <a href="#">Pricing</a><br>
+        <a href="#">Updates</a>
+      </div>
+      <div class="space-y-2">
+        <h3 class="font-bold">Support</h3>
+        <a href="#">Help Center</a><br>
+        <a href="#">Contact</a><br>
+        <a href="#">Terms</a>
+      </div>
+      <div>
+        <p class="text-gray-500">&copy; All rights reserved mindnest.com</p>
+      </div>
+    </div>
+    <div class="flex space-x-4 mt-6">
+      <a href="#"><img src="{{ url_for('static', filename='instagram.png') }}" class="w-5 h-5"></a>
+      <a href="#"><img src="{{ url_for('static', filename='call.png') }}" class="w-5 h-5"></a>
+      <a href="#"><img src="{{ url_for('static', filename='linkedin.png') }}" class="w-5 h-5"></a>
+    </div>
+  </footer>
+
+</body>
+</html>
