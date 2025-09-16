@@ -1,0 +1,11 @@
+Flask
+gunicorn
+transformers
+torch
+datasets
+pandas
+accelerate
+sentencepiece
+protobuf
+requests
+numpy
