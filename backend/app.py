@@ -1,103 +1,39 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
-import torch
 import re
 import os
 import logging
-import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Get the absolute path to the static directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+
+# Create directories if they don't exist
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATE_DIR, exist_ok=True)
+
+app = Flask(__name__, 
+            static_folder=STATIC_DIR,
+            template_folder=TEMPLATE_DIR)
 CORS(app)
+
+# Serve static files directly
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(STATIC_DIR, filename)
 
 # Initialize model and tokenizer as None
 tokenizer = None
 model = None
 model_loaded = False
-model_load_attempted = False
 
-def load_model():
-    global tokenizer, model, model_loaded, model_load_attempted
-    
-    if model_load_attempted:
-        return
-    
-    model_load_attempted = True
-    
-    try:
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        
-        # Determine model path - different for local vs production
-        model_path = None
-        
-        # Check possible model paths (for different environments)
-        possible_paths = [
-            "mental_health_chatbot",  # Render and most cloud environments
-            "backend/mental_health_chatbot",  # If app is in root but model in backend
-            "./mental_health_chatbot",  # Current directory
-            "/opt/render/project/src/mental_health_chatbot",  # Render specific path
-            r"C:/Users/explo/Desktop/Mental Health Chatbot/backend/mental_health_chatbot"  # Your local path
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(path):
-                model_path = path
-                logger.info(f"Found model at: {model_path}")
-                break
-        
-        if not model_path:
-            logger.error("Model path not found in any expected location")
-            return
-        
-        logger.info(f"Attempting to load model from: {model_path}")
-        
-        # Check if the path is a directory with model files
-        if not os.path.isdir(model_path):
-            logger.error(f"Model path is not a directory: {model_path}")
-            return
-            
-        # Load tokenizer
-        logger.info("Loading tokenizer...")
-        tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
-        
-        # Load model
-        logger.info("Loading model...")
-        model = AutoModelForCausalLM.from_pretrained(model_path, local_files_only=True)
-        model.eval()
-        
-        # Ensure pad token exists
-        if tokenizer.pad_token is None:
-            tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-            model.resize_token_embeddings(len(tokenizer))
-            
-        model_loaded = True
-        logger.info("✅ Model and tokenizer loaded successfully!")
-        
-        # Test the model with a simple prompt
-        test_prompt = "<user>: Hello <bot>:"
-        inputs = tokenizer(test_prompt, return_tensors="pt", truncation=True, max_length=128)
-        
-        with torch.no_grad():
-            outputs = model.generate(
-                inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                max_new_tokens=10,
-                pad_token_id=tokenizer.pad_token_id
-            )
-        
-        test_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        logger.info(f"Model test output: {test_output}")
-        
-    except Exception as e:
-        logger.error(f"❌ Error loading model: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-
-# Load model when the app starts
-load_model()
+# Don't load the model at startup to avoid memory issues
+# We'll load it on-demand or use fallback responses
 
 MAX_INPUT_LEN = 128
 MAX_NEW_TOKENS = 40
@@ -125,13 +61,66 @@ def first_n_sentences(text: str, n=2) -> str:
         out += "."
     return out
 
+def load_model_if_needed():
+    """Load the model only when needed and only once"""
+    global tokenizer, model, model_loaded
+    
+    if model_loaded:
+        return True
+        
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        
+        # Check possible model paths
+        possible_paths = [
+            "mental_health_chatbot",
+            "backend/mental_health_chatbot", 
+            "./mental_health_chatbot",
+        ]
+        
+        model_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                model_path = path
+                break
+                
+        if not model_path:
+            logger.warning("Model path not found")
+            return False
+            
+        logger.info(f"Loading model from: {model_path}")
+        
+        # Load with optimizations for limited memory
+        tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path, 
+            local_files_only=True,
+            torch_dtype="auto",  # Use appropriate dtype
+            low_cpu_mem_usage=True  # Reduce memory usage during loading
+        )
+        model.eval()
+        
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+            model.resize_token_embeddings(len(tokenizer))
+            
+        model_loaded = True
+        logger.info("✅ Model loaded successfully!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return False
+
 def generate_bot_reply(user_message):
     """
     Use your trained model to generate responses with better error handling
     """
-    # If model isn't loaded, use fallback
-    if not model_loaded:
-        logger.warning("Model not loaded, using fallback responses")
+    # Try to load model if not loaded (but don't force it)
+    model_available = load_model_if_needed()
+    
+    # If model isn't available, use fallback
+    if not model_available:
         return generate_fallback_response(user_message)
     
     # Skip empty messages
@@ -152,20 +141,42 @@ def generate_bot_reply(user_message):
             padding=True
         )
         
-        # Generate response
-        with torch.no_grad():
-            generated = model.generate(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                max_new_tokens=MAX_NEW_TOKENS,
-                do_sample=True,
-                top_p=0.85,
-                temperature=0.6,
-                top_k=50,
-                no_repeat_ngram_size=3,
-                pad_token_id=tokenizer.pad_token_id,
-                eos_token_id=tokenizer.eos_token_id,
-            )
+        # Generate response with timeout protection
+        import signal
+        from contextlib import contextmanager
+        
+        class TimeoutException(Exception):
+            pass
+        
+        @contextmanager
+        def time_limit(seconds):
+            def signal_handler(signum, frame):
+                raise TimeoutException("Timed out!")
+            signal.signal(signal.SIGALRM, signal_handler)
+            signal.alarm(seconds)
+            try:
+                yield
+            finally:
+                signal.alarm(0)
+        
+        try:
+            with time_limit(10):  # 10 second timeout
+                with torch.no_grad():
+                    generated = model.generate(
+                        input_ids=inputs["input_ids"],
+                        attention_mask=inputs["attention_mask"],
+                        max_new_tokens=MAX_NEW_TOKENS,
+                        do_sample=True,
+                        top_p=0.85,
+                        temperature=0.6,
+                        top_k=50,
+                        no_repeat_ngram_size=3,
+                        pad_token_id=tokenizer.pad_token_id,
+                        eos_token_id=tokenizer.eos_token_id,
+                    )
+        except TimeoutException:
+            logger.warning("Model generation timed out")
+            return generate_fallback_response(user_message)
         
         # Decode the response
         out_text = tokenizer.decode(generated[0], skip_special_tokens=False)
@@ -191,57 +202,48 @@ def generate_bot_reply(user_message):
         
     except Exception as e:
         logger.error(f"Error generating response: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
         return generate_fallback_response(user_message)
 
 def generate_fallback_response(user_message):
     """
-    Comprehensive fallback responses
+    Comprehensive fallback responses - optimized for production
     """
     if not user_message:
         return "Hello! How are you feeling today?"
     
     user_message_lower = user_message.lower()
     
-    # Crisis detection - always prioritize safety
+    # Crisis detection
     crisis_keywords = ["suicide", "kill myself", "end it all", "want to die", "self harm", "hurting myself"]
     if any(keyword in user_message_lower for keyword in crisis_keywords):
-        return "I'm really concerned about what you're sharing. Please reach out to a crisis helpline immediately. You can call or text 988 in the US for the Suicide & Crisis Lifeline. Your life is precious and there are people who want to help."
+        return "I'm really concerned about what you're sharing. Please reach out to a crisis helpline immediately. You can call or text 988 in the US for the Suicide & Crisis Lifeline."
     
     # Emotional states
     if any(word in user_message_lower for word in ["stress", "stressed", "overwhelmed", "pressure"]):
-        return "I understand you're feeling stressed. Try taking deep breaths - inhale for 4 seconds, hold for 4, exhale for 6. This can help calm your nervous system. Would you like to talk about what's causing the stress?"
+        return "I understand you're feeling stressed. Try taking deep breaths - inhale for 4 seconds, hold for 4, exhale for 6. This can help calm your nervous system."
     
     elif any(word in user_message_lower for word in ["sad", "depress", "unhappy", "miserable", "down", "hopeless"]):
-        return "I'm sorry you're feeling this way. It's okay to not be okay. Sometimes just talking about what's bothering us can help. Would you like to share more about what's going on?"
+        return "I'm sorry you're feeling this way. It's okay to not be okay. Would you like to talk about what's going on?"
     
     elif any(word in user_message_lower for word in ["anxiety", "anxious", "panic", "nervous", "scared", "worry", "worried"]):
-        return "Anxiety can feel overwhelming. Have you tried grounding techniques? Name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, and 1 you can taste. This can help bring you back to the present moment."
+        return "Anxiety can feel overwhelming. Have you tried grounding techniques? Name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, and 1 you can taste."
     
     elif any(word in user_message_lower for word in ["angry", "mad", "frustrated", "annoyed", "irritated"]):
-        return "It sounds like you're feeling really frustrated. Sometimes taking a short break, going for a walk, or doing some deep breathing can help when emotions feel intense. Would any of those help right now?"
+        return "It sounds like you're feeling frustrated. Sometimes taking a short break or doing deep breathing can help when emotions feel intense."
     
     # Greetings
     elif any(word in user_message_lower for word in ["hello", "hi", "hey", "greetings"]):
         return "Hello there! I'm here to listen. How are you feeling today?"
     
     elif any(word in user_message_lower for word in ["thank", "thanks", "appreciate"]):
-        return "You're welcome! I'm glad I could help. Remember I'm here whenever you need to talk."
+        return "You're welcome! I'm glad I could help."
     
     elif "how are you" in user_message_lower:
         return "I'm here and ready to listen. How are you feeling today?"
     
-    # Common concerns
-    elif any(word in user_message_lower for word in ["sleep", "tired", "insomnia", "exhausted", "can't sleep"]):
-        return "Sleep issues are common when we're stressed. Try maintaining a regular sleep schedule, avoiding screens before bed, and creating a calming bedtime routine. Would you like to talk about what might be affecting your sleep?"
-    
-    elif any(word in user_message_lower for word in ["lonely", "alone", "isolated", "no friends"]):
-        return "Feeling lonely can be really difficult. Remember that many people experience loneliness, and it doesn't mean there's anything wrong with you. Would you like to talk about what's been making you feel this way?"
-    
     # Default response
     else:
-        return "Thank you for sharing that with me. I'm here to listen. Would you like to talk more about how you're feeling?"
+        return "Thank you for sharing that with me. I'm here to listen."
 
 # ---------- Routes ----------
 
@@ -276,29 +278,37 @@ def get_response():
         
     except Exception as e:
         logger.error(f"Error in get_response: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
         return jsonify({"reply": "I'm having trouble processing your message right now. Please try again in a moment."})
 
-# Add a health check endpoint
 @app.route("/health")
 def health_check():
     return jsonify({
         "status": "ok",
-        "model_loaded": model_loaded,
-        "model_load_attempted": model_load_attempted
+        "model_available": model_loaded
     })
+
+# Test endpoint to verify images are loading
+@app.route("/test-images")
+def test_images():
+    """Test endpoint to verify images are loading"""
+    images = [
+        'logo.png', 'hero.png', 'feature1.png', 'feature2.png', 
+        'feature3.png', 'about-hero.png', 'mission.png', 'suyashgupta.png',
+        'instagram.png', 'call.png', 'linkedin.png', 'github.png', 'mail.png'
+    ]
+    
+    result = "<h1>Image Test</h1>"
+    for image in images:
+        image_path = os.path.join(STATIC_DIR, image)
+        if os.path.exists(image_path):
+            result += f'<p>✓ {image} - EXISTS - <img src="/static/{image}" height="50"></p>'
+        else:
+            result += f'<p>✗ {image} - MISSING</p>'
+    
+    return result
 
 # ---------- Main ----------
 if __name__ == "__main__":
-    # Print status message
-    if model_loaded:
-        print("✅ Model loaded successfully! Starting Flask server...")
-    else:
-        print("⚠️  Model not loaded. Using fallback responses. Starting Flask server...")
-    
     # For production, use the PORT environment variable
     port = int(os.environ.get("PORT", 5000))
-    debug_mode = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
-    
-    app.run(debug=debug_mode, host='0.0.0.0', port=port)
+    app.run(debug=False, host='0.0.0.0', port=port)
