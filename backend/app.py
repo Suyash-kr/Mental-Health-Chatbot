@@ -106,7 +106,7 @@ def clean_artifacts(text: str) -> str:
     if not text:
         return ""
     text = re.sub(r"\[\s*'|'\s*\]|\"\s*\"|\[\s*\"|\"\s*\]", " ", text)
-    text = text.replace("']","").replace("['","").replace('"]','").replace('["',"")
+    text = text.replace("']", "").replace("['", "").replace('"]', "").replace('["', "")
     text = re.sub(r"<bot>[:]*", "<bot>:", text)
     text = re.sub(r"\s{2,}", " ", text)
     text = re.sub(r'^[^A-Za-z0-9]+', '', text)
